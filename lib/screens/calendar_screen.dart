@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
-import '../services/hive_service.dart';
+import 'package:table_calendar/table_calendar.dart';
+
 import '../models/cycle_settings.dart';
 import '../providers/medicine_provider.dart';
 import '../providers/side_effect_provider.dart';
-import '../models/medicine.dart';
-import '../models/side_effect.dart';
-import '../models/cycle_settings.dart';
+import '../services/hive_service.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -17,389 +15,182 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  final ValueNotifier<List<CalendarEvent>> _selectedEvents =
+      ValueNotifier<List<CalendarEvent>>([]);
+  final HiveService _hiveService = HiveService();
 
-  final List<Map<String, dynamic>> _moods = [
-    {'score': 1, 'icon': '😫', 'label': 'Ужасно'},
-    {'score': 2, 'icon': '😟', 'label': 'Плохо'},
+  final List<Map<String, dynamic>> _moods = const [
+    {'score': 1, 'icon': '😫', 'label': 'Плохо'},
+    {'score': 2, 'icon': '😟', 'label': 'Тяжело'},
     {'score': 3, 'icon': '😐', 'label': 'Нормально'},
     {'score': 4, 'icon': '🙂', 'label': 'Хорошо'},
     {'score': 5, 'icon': '🤩', 'label': 'Отлично'},
   ];
-  late final ValueNotifier<List<Todo>> _selectedEvents;
+
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
-  
-  CycleSettings? _settings;
-
-  _CalendarScreenState() {
-    _selectedEvents = ValueNotifier([]);
-  }
-    void _showMoodDialog(DateTime date) {
-    // Получаем текущее настроение за этот день (если есть)
-    final hiveService = HiveService();
-    // Нам нужно найти запись. Для простоты используем метод из сервиса
-    // Но так как сервис не имеет геттера для поиска по дате в текущей реализации,
-    // давайте просто переберем значения (или добавь геттер в сервис, как я писал выше).
-    
-    int? currentMood;
-    try {
-       final day = hiveService.getCycleDayByDate(date);
-       if (day != null && day.id.isNotEmpty) {
-         currentMood = day.moodScore;
-       }
-    } catch (_) {}
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Как вы себя чувствуете'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: _moods.map((m) {
-                final isSelected = currentMood == m['score'];
-                return GestureDetector(
-                  onTap: () async {
-                    await hiveService.updateMood(date, m['score']);
-                    Navigator.pop(ctx);
-                    setState(() {}); // Обновить календарь (перерисовать маркер)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Настроение сохранено: ${m['label']}'), duration: Duration(seconds: 1)),
-                    );
-                  },
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isSelected ? Colors.pink[100] : Colors.transparent,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: isSelected ? Colors.pink : Colors.grey, width: 2),
-                        ),
-                        child: Text(m['icon'], style: TextStyle(fontSize: 32)),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(m['label'], style: TextStyle(fontSize: 10, color: isSelected ? Colors.pink : Colors.grey)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          if (currentMood != null)
-            TextButton(
-              onPressed: () async {
-                await hiveService.updateMood(date, 0); // 0 или null означает сброс
-                Navigator.pop(ctx);
-                setState(() {});
-              },
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Удалить'),
-            ),
-        ],
-      ),
-    );
-  }
+  DateTime _selectedDay = DateTime.now();
+  late CycleSettings _settings;
+  bool _eventsLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-  }
-
-  void _loadSettings() {
-    // Создаем экземпляр сервиса напрямую, без Provider
-    final hiveService = HiveService(); 
-    
-    setState(() {
-      _settings = hiveService.getCycleSettings();
-      
-      // Если настроек нет, берем дефолт
-      if (_settings == null) {
-        _settings = CycleSettings(
-          lastPeriodStart: DateTime.now().subtract(const Duration(days: 10)),
+    _settings = _hiveService.getCycleSettings() ??
+        CycleSettings(
+          lastPeriodStart: DateTime.now().subtract(const Duration(days: 14)),
           cycleLength: 28,
           periodLength: 5,
         );
-      }
-    });
-    _updateSelectedEvents();
   }
 
-  void _updateSelectedEvents() {
-    if (_selectedDay != null) {
-      _selectedEvents.value = _getEventsForDay(_selectedDay!);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_eventsLoaded) {
+      _selectedEvents.value = _getEventsForDay(_selectedDay);
+      _eventsLoaded = true;
     }
   }
 
   @override
+  void dispose() {
+    _selectedEvents.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (_settings == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    final selectedPhase = _settings.getPhaseFor(_selectedDay);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Мой цикл'),
+        title: const Text('Календарь цикла'),
         centerTitle: true,
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => _showSettingsDialog(context),
+            icon: const Icon(Icons.settings_outlined),
             tooltip: 'Настройки цикла',
+            onPressed: _showSettingsDialog,
           ),
         ],
       ),
       body: Column(
         children: [
-          // 📅 КАЛЕНДАРЬ С РАСКРАСКОЙ
-          TableCalendar<Todo>(
+          TableCalendar<CalendarEvent>(
             firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
+            lastDay: DateTime.utc(2035, 12, 31),
             focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
             selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+            calendarFormat: _calendarFormat,
             eventLoader: _getEventsForDay,
-            
-            // 🔥 ИСПРАВЛЕНИЕ: Используем calendarBuilders вместо cellDecoration
-            calendarBuilders: CalendarBuilders(
-              // 1. Раскраска дней (менструация/овуляция)
-              defaultBuilder: (context, date, _) {
-                final phase = _settings!.getPhaseFor(date);
-                final dayNum = _settings!.getCycleDayFor(date);
-                
-                Color? bgColor;
-                Color textColor = Colors.black;
-
-                if (phase == 'menstruation') {
-                  bgColor = Colors.red[100];
-                  textColor = const Color.fromARGB(255, 213, 19, 19);
-                } else if (phase == 'ovulation' && dayNum >= 13 && dayNum <= 15) {
-                  bgColor = Colors.green[100];
-                  textColor = const Color.fromARGB(255, 41, 180, 50);
-                }
-
-                if (isSameDay(_selectedDay, date) || isSameDay(DateTime.now(), date)) {
-                  return null;
-                }
-
-                if (bgColor != null) {
-                  return Container(
-                    margin: const EdgeInsets.all(4.0),
-                    decoration: BoxDecoration(
-                      color: bgColor,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${date.day}',
-                      style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
-                    ),
-                  );
-                }
-                return null;
-              },
-              
-              // 2. 🔥 ИСПРАВЛЕННЫЙ МАРКЕР: Теперь показывает и события, и НАСТРОЕНИЕ
-              markerBuilder: (context, date, events) {
-                // --- ЧАСТЬ А: Получаем настроение ---
-                int? moodScore;
-                try {
-                   final hiveService = HiveService();
-                   final day = hiveService.getCycleDayByDate(date);
-                   if (day != null && day.id.isNotEmpty) {
-                     moodScore = day.moodScore;
-                   }
-                } catch (_) {}
-
-                // --- ЧАСТЬ Б: Формируем список виджетов ---
-                List<Widget> markers = [];
-
-                // Если есть настроение - добавляем смайлик
-                if (moodScore != null && moodScore > 0) {
-                  final moodData = _moods.firstWhere(
-                    (m) => m['score'] == moodScore,
-                    orElse: () => {'icon': '😐'}, 
-                  );
-                  markers.add(Text(moodData['icon'], style: const TextStyle(fontSize: 18)));
-                } 
-                // Если настроения нет, но есть события (лекарства/симптомы) - рисуем точки
-                else if (events.isNotEmpty) {
-                  markers.addAll(events.take(3).map((e) {
-                    return Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: BoxDecoration(
-                        color: e.isMedicine ? Colors.blue : Colors.orange,
-                        shape: BoxShape.circle,
-                      ),
-                    );
-                  }).toList());
-                }
-
-                if (markers.isEmpty) return const SizedBox.shrink();
-                
-                return Positioned(
-                  bottom: 1,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: markers,
-                  ),
-                );
-              },
-            ),
-            
-            // Стандартные стили для сегодня и выбранного дня
+            startingDayOfWeek: StartingDayOfWeek.monday,
+            availableCalendarFormats: const {
+              CalendarFormat.month: 'Месяц',
+              CalendarFormat.twoWeeks: '2 недели',
+              CalendarFormat.week: 'Неделя',
+            },
             calendarStyle: CalendarStyle(
-              todayDecoration: BoxDecoration(
-                color: const Color(0xFFE8A4B8),
-                shape: BoxShape.circle,
-              ),
-              todayTextStyle: const TextStyle(color: Colors.white),
-              selectedDecoration: BoxDecoration(
-                color: Colors.deepPurple,
-                shape: BoxShape.circle,
-              ),
-              selectedTextStyle: const TextStyle(color: Colors.white),
               markersMaxCount: 3,
               outsideDaysVisible: false,
+              todayDecoration: const BoxDecoration(
+                color: Color(0xFFE8A4B8),
+                shape: BoxShape.circle,
+              ),
+              selectedDecoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
             ),
-
+            calendarBuilders: CalendarBuilders<CalendarEvent>(
+              defaultBuilder: (context, date, _) => _buildPhaseDay(date),
+              markerBuilder: _buildMarkers,
+            ),
             onDaySelected: (selectedDay, focusedDay) {
               setState(() {
                 _selectedDay = selectedDay;
                 _focusedDay = focusedDay;
+                _selectedEvents.value = _getEventsForDay(selectedDay);
               });
-              _updateSelectedEvents();
-              
-              // Показываем диалог выбора настроения
               _showMoodDialog(selectedDay);
             },
             onFormatChanged: (format) {
-              if (_calendarFormat != format) setState(() => _calendarFormat = format);
+              if (_calendarFormat != format) {
+                setState(() => _calendarFormat = format);
+              }
             },
-            onPageChanged: (focusedDay) {
-              _focusedDay = focusedDay;
-            },
+            onPageChanged: (focusedDay) => _focusedDay = focusedDay,
           ),
-          
-          const SizedBox(height: 10),
-
-          // 🎛️ КНОПКИ УПРАВЛЕНИЯ
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _markPeriodStart(_selectedDay ?? DateTime.now()),
-                    icon: const Icon(Icons.water_drop, color: Colors.white),
-                    label: const Text('Начало цикла', style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red[400],
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
+                    onPressed: () => _markPeriodStart(_selectedDay),
+                    icon: const Icon(Icons.water_drop_outlined),
+                    label: const Text('Начало цикла'),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _showSettingsDialog(context),
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Настройки'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
+                    onPressed: _showSettingsDialog,
+                    icon: const Icon(Icons.tune),
+                    label: const Text('Параметры'),
                   ),
                 ),
               ],
             ),
           ),
-
-          const SizedBox(height: 15),
-          
-          // 📊 ИНФО О ВЫБРАННОМ ДНЕ
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.pink[50],
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.pink[200]!),
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow(
-                  'День цикла', 
-                  _selectedDay != null ? '${_settings!.getCycleDayFor(_selectedDay!)}-й' : '-', 
-                  Icons.calendar_today
-                ),
-                const SizedBox(height: 10),
-                _buildInfoRow(
-                  'Фаза', 
-                  _getPhaseName(_selectedDay != null ? _settings!.getPhaseFor(_selectedDay!) : ''), 
-                  Icons.self_improvement
-                ),
-                if (_selectedDay != null && _settings!.getPhaseFor(_selectedDay!) == 'menstruation')
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text('⚠️ Сегодня день менструации', style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.bold)),
-                  ),
-              ],
-            ),
+          _DaySummary(
+            dayNumber: _settings.getCycleDayFor(_selectedDay),
+            phaseName: _phaseName(selectedPhase),
+            phaseColor: _phaseColor(selectedPhase),
           ),
-
-          const Divider(height: 30),
-          
-          // 📝 СОБЫТИЯ ДНЯ (Лекарства и Симптомы)
+          const Divider(height: 24),
           Expanded(
-            child: ValueListenableBuilder<List<Todo>>(
+            child: ValueListenableBuilder<List<CalendarEvent>>(
               valueListenable: _selectedEvents,
-              builder: (context, value, _) {
-                if (value.isEmpty && _selectedDay == null) {
-                   return const Center(child: Text('Выберите день в календаре'));
-                }
-                if (value.isEmpty) {
+              builder: (context, events, _) {
+                if (events.isEmpty) {
                   return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.event_note, size: 48, color: Colors.grey[300]),
-                        const SizedBox(height: 10),
-                        Text('Нет записей на этот день', style: TextStyle(color: Colors.grey[500])),
-                      ],
+                    child: Text(
+                      'На выбранный день записей нет',
+                      style: TextStyle(color: Colors.grey.shade600),
                     ),
                   );
                 }
 
-                return ListView.builder(
-                  itemCount: value.length,
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: events.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
-                    final event = value[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      child: ListTile(
-                        leading: Icon(
-                          event.isMedicine ? Icons.medication : Icons.note_alt,
-                          color: event.isMedicine ? Colors.blue : Colors.orange,
-                        ),
-                        title: Text(event.title),
-                        subtitle: Text(event.description),
+                    final event = events[index];
+                    return ListTile(
+                      tileColor: Theme.of(context).colorScheme.surface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      leading: Icon(
+                        event.isMedicine
+                            ? Icons.medication_outlined
+                            : Icons.note_alt_outlined,
+                        color: event.isMedicine ? Colors.blue : Colors.orange,
+                      ),
+                      title: Text(event.title),
+                      subtitle: Text(event.description),
+                      trailing: event.isTaken == null
+                          ? null
+                          : Icon(
+                              event.isTaken!
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: event.isTaken!
+                                  ? Colors.green
+                                  : Colors.grey.shade400,
+                            ),
                     );
                   },
                 );
@@ -411,96 +202,170 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value, IconData icon) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(children: [Icon(icon, size: 18, color: Colors.pink[400]), const SizedBox(width: 8), Text(label, style: const TextStyle(fontWeight: FontWeight.w500))]),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-      ],
-    );
-  }
-
-  String _getPhaseName(String phase) {
-    switch (phase) {
-      case 'menstruation': return '🩸 Менструация';
-      case 'ovulation': return '🥚 Овуляция';
-      case 'follicular': return '🌱 Фолликулярная';
-      case 'luteal': return '🍂 Лютеиновая';
-      default: return 'Неизвестно';
+  Widget? _buildPhaseDay(DateTime date) {
+    if (isSameDay(date, DateTime.now()) || isSameDay(date, _selectedDay)) {
+      return null;
     }
-  }
 
-  // 🔥 ОТМЕТИТЬ НАЧАЛО ЦИКЛА
-  void _markPeriodStart(DateTime date) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Начало цикла?'),
-        content: Text('Установить ${date.day}.${date.month}.${date.year} как первый день менструации?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          ElevatedButton(
-            onPressed: () {
-              // 🔥 FIX: Создаем дату строго с полуночи
-              final normalizedDate = DateTime(date.year, date.month, date.day);
+    final phase = _settings.getPhaseFor(date);
+    final color = _phaseColor(phase);
+    if (color == null) return null;
 
-              final newSettings = CycleSettings(
-                lastPeriodStart: normalizedDate, // Сохраняем очищенную дату
-                cycleLength: _settings!.cycleLength,
-                periodLength: _settings!.periodLength,
-              );
-              
-              final hiveService = HiveService(); // Или через провайдер, если уже починил
-              hiveService.saveCycleSettings(newSettings);
-              
-              setState(() => _settings = newSettings);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Цикл обновлен!'), backgroundColor: Colors.green));
-              _updateSelectedEvents();
-            },
-            child: const Text('Да'),
-          ),
-        ],
+    return Container(
+      margin: const EdgeInsets.all(6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.18),
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        '${date.day}',
+        style: TextStyle(color: color, fontWeight: FontWeight.w700),
       ),
     );
   }
 
-  // ⚙️ НАСТРОЙКИ ДЛИНЫ ЦИКЛА
-  void _showSettingsDialog(BuildContext context) {
-    final cycleCtrl = TextEditingController(text: _settings!.cycleLength.toString());
-    final periodCtrl = TextEditingController(text: _settings!.periodLength.toString());
+  Widget _buildMarkers(
+    BuildContext context,
+    DateTime date,
+    List<CalendarEvent> events,
+  ) {
+    final day = _hiveService.getCycleDayByDate(date);
+    final moodScore = day?.moodScore;
+    final mood = moodScore == null || moodScore <= 0
+        ? null
+        : _moods.firstWhere(
+            (item) => item['score'] == moodScore,
+            orElse: () => _moods[2],
+          );
+
+    if (mood != null) {
+      return Positioned(
+        bottom: 0,
+        child: Text(mood['icon'], style: const TextStyle(fontSize: 14)),
+      );
+    }
+
+    if (events.isEmpty) return const SizedBox.shrink();
+
+    return Positioned(
+      bottom: 4,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: events.take(3).map((event) {
+          return Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            decoration: BoxDecoration(
+              color: event.isMedicine ? Colors.blue : Colors.orange,
+              shape: BoxShape.circle,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  void _showMoodDialog(DateTime date) {
+    final currentMood = _hiveService.getCycleDayByDate(date)?.moodScore;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Настройки цикла'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: cycleCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Длина цикла (дни)', hintText: '28')),
-            TextField(controller: periodCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Длительность месячных (дни)', hintText: '5')),
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Самочувствие за день'),
+          content: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: _moods.map((mood) {
+              final isSelected = currentMood == mood['score'];
+              return InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () async {
+                  await _hiveService.updateMood(date, mood['score']);
+                  if (!mounted) return;
+                  Navigator.pop(dialogContext);
+                  setState(() {});
+                },
+                child: Container(
+                  width: 76,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFFE8A4B8).withOpacity(0.2)
+                        : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFFE8A4B8)
+                          : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(mood['icon'], style: const TextStyle(fontSize: 28)),
+                      const SizedBox(height: 4),
+                      Text(
+                        mood['label'],
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          actions: [
+            if (currentMood != null && currentMood > 0)
+              TextButton(
+                onPressed: () async {
+                  await _hiveService.updateMood(date, 0);
+                  if (!mounted) return;
+                  Navigator.pop(dialogContext);
+                  setState(() {});
+                },
+                child: const Text('Сбросить'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Закрыть'),
+            ),
           ],
+        );
+      },
+    );
+  }
+
+  void _markPeriodStart(DateTime date) {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Обновить цикл?'),
+        content: Text(
+          'Установить ${normalizedDate.day}.${normalizedDate.month}.${normalizedDate.year} как первый день цикла?',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Отмена'),
+          ),
           ElevatedButton(
-            onPressed: () {
-              final cLen = int.tryParse(cycleCtrl.text) ?? 28;
-              final pLen = int.tryParse(periodCtrl.text) ?? 5;
-              
+            onPressed: () async {
               final newSettings = CycleSettings(
-                lastPeriodStart: _settings!.lastPeriodStart,
-                cycleLength: cLen,
-                periodLength: pLen,
+                lastPeriodStart: normalizedDate,
+                cycleLength: _settings.cycleLength,
+                periodLength: _settings.periodLength,
               );
-              
-              // Прямой экземпляр
-              final hiveService = HiveService();
-              hiveService.saveCycleSettings(newSettings);
-              
+              await _hiveService.saveCycleSettings(newSettings);
+              if (!mounted) return;
               setState(() => _settings = newSettings);
-              Navigator.pop(ctx);
+              Navigator.pop(dialogContext);
             },
             child: const Text('Сохранить'),
           ),
@@ -509,34 +374,199 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  List<Todo> _getEventsForDay(DateTime day) {
+  void _showSettingsDialog() {
+    final cycleController =
+        TextEditingController(text: _settings.cycleLength.toString());
+    final periodController =
+        TextEditingController(text: _settings.periodLength.toString());
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Настройки цикла'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: cycleController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Длина цикла, дни'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: periodController,
+              keyboardType: TextInputType.number,
+              decoration:
+                  const InputDecoration(labelText: 'Длительность месячных'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final cycleLength =
+                  (int.tryParse(cycleController.text) ?? 28).clamp(21, 45);
+              final periodLength =
+                  (int.tryParse(periodController.text) ?? 5).clamp(2, 10);
+              final newSettings = CycleSettings(
+                lastPeriodStart: _settings.lastPeriodStart,
+                cycleLength: cycleLength,
+                periodLength: periodLength,
+              );
+              await _hiveService.saveCycleSettings(newSettings);
+              if (!mounted) return;
+              setState(() => _settings = newSettings);
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      cycleController.dispose();
+      periodController.dispose();
+    });
+  }
+
+  List<CalendarEvent> _getEventsForDay(DateTime day) {
     final medProvider = Provider.of<MedicineProvider>(context, listen: false);
     final sideProvider = Provider.of<SideEffectProvider>(context, listen: false);
-    final events = <Todo>[];
+    final events = <CalendarEvent>[];
+    final dateKey = _dateKey(day);
 
-    // Лекарства
-    for (var med in medProvider.medicines) {
-      if (med.daysOfWeek.contains(day.weekday)) {
-        final dateStr = '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-        events.add(Todo(title: med.name, description: med.dosage ?? '', isMedicine: true, isTaken: med.takenDates.contains(dateStr), severity: null));
+    for (final medicine in medProvider.medicines) {
+      if (medicine.daysOfWeek.contains(day.weekday)) {
+        events.add(
+          CalendarEvent(
+            title: medicine.name,
+            description: medicine.dosage?.isNotEmpty == true
+                ? medicine.dosage!
+                : 'По расписанию: ${medicine.schedule.join(', ')}',
+            isMedicine: true,
+            isTaken: medicine.takenDates.contains(dateKey),
+          ),
+        );
       }
     }
 
-    // Симптомы
-    for (var effect in sideProvider.sideEffects) {
-      if (effect.timestamp.year == day.year && effect.timestamp.month == day.month && effect.timestamp.day == day.day) {
-        events.add(Todo(title: 'Симптом', description: effect.description, isMedicine: false, isTaken: null, severity: effect.severity));
+    for (final effect in sideProvider.sideEffects) {
+      if (_isSameDate(effect.timestamp, day)) {
+        events.add(
+          CalendarEvent(
+            title: 'Симптом',
+            description: '${effect.description} · тяжесть ${effect.severity}/3',
+            isMedicine: false,
+          ),
+        );
       }
     }
+
     return events;
+  }
+
+  Color? _phaseColor(String phase) {
+    switch (phase) {
+      case 'menstruation':
+        return Colors.red.shade600;
+      case 'ovulation':
+        return Colors.green.shade700;
+      case 'follicular':
+        return Colors.teal.shade600;
+      case 'luteal':
+        return Colors.deepPurple.shade400;
+      default:
+        return null;
+    }
+  }
+
+  String _phaseName(String phase) {
+    switch (phase) {
+      case 'menstruation':
+        return 'Менструация';
+      case 'ovulation':
+        return 'Овуляция';
+      case 'follicular':
+        return 'Фолликулярная фаза';
+      case 'luteal':
+        return 'Лютеиновая фаза';
+      default:
+        return 'Неизвестно';
+    }
+  }
+
+  String _dateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }
 
-class Todo {
+class _DaySummary extends StatelessWidget {
+  const _DaySummary({
+    required this.dayNumber,
+    required this.phaseName,
+    required this.phaseColor,
+  });
+
+  final int dayNumber;
+  final String phaseName;
+  final Color? phaseColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: (phaseColor ?? const Color(0xFFE8A4B8)).withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: (phaseColor ?? const Color(0xFFE8A4B8)).withOpacity(0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.calendar_today_outlined,
+            color: phaseColor ?? Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'День цикла: ${dayNumber == 0 ? '-' : dayNumber}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text(
+            phaseName,
+            style: TextStyle(
+              color: phaseColor ?? Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CalendarEvent {
+  const CalendarEvent({
+    required this.title,
+    required this.description,
+    required this.isMedicine,
+    this.isTaken,
+  });
+
   final String title;
   final String description;
   final bool isMedicine;
   final bool? isTaken;
-  final int? severity;
-  Todo({required this.title, required this.description, required this.isMedicine, required this.isTaken, required this.severity});
 }

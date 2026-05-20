@@ -165,8 +165,8 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
         for (int i = 0; i < _selectedTimes.length; i++) {
           final parts = _selectedTimes[i].split(':');
           await NotificationService().scheduleMedicationReminder(
-            id: DateTime.now().millisecondsSinceEpoch + i,
-            title: '💊 Пора принимать лекарство',
+            id: DateTime.now().millisecondsSinceEpoch.remainder(100000) + i,
+            title: 'Пора принять лекарство',
             body: medDosage.isNotEmpty ? '$medName ($medDosage)' : medName,
             hour: int.parse(parts[0]),
             minute: int.parse(parts[1]),

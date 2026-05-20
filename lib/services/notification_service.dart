@@ -1,36 +1,38 @@
-// lib/services/notification_service.dart
-// Сервис для работы с локальными уведомлениями
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz;
 
 class NotificationService {
+  NotificationService._internal();
+
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
-  NotificationService._internal();
+
+  static const String _channelId = 'medication_reminders';
+  static const String _channelName = 'Напоминания о лекарствах';
+  static const String _channelDescription =
+      'Уведомления о времени приема препаратов';
 
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  // 🔹 Инициализация (вызывать один раз при старте приложения)
+  bool _isInitialized = false;
+
   Future<void> init() async {
-    // Инициализация timezone
-    tz.initializeTimeZones();
+    if (_isInitialized) return;
 
-    // Настройки для Android
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    tz_data.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
 
-    // Настройки для iOS
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
 
-    const InitializationSettings initSettings = InitializationSettings(
+    const initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
@@ -38,116 +40,187 @@ class NotificationService {
     await _notificationsPlugin.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
-        // Обработка нажатия на уведомление
-        print('🔔 Notification tapped: ${response.payload}');
+        debugPrint('Notification tapped: ${response.payload}');
       },
     );
 
-    // Запрос разрешений для Android 13+
     await _notificationsPlugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+
+    _isInitialized = true;
   }
 
-  // 🔹 Показать простое уведомление (для теста)
   Future<void> showSimpleNotification({
     required int id,
     required String title,
     required String body,
     String? payload,
   }) async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      'medication_channel', // ID канала
-      'Напоминания о лекарствах', // Название канала
-      channelDescription: 'Уведомления о времени приёма препаратов',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
-
-    const DarwinNotificationDetails iosDetails =
-        DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-
-    const NotificationDetails platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+    await init();
 
     await _notificationsPlugin.show(
-      id,
+      _safeNotificationId(id),
       title,
       body,
-      platformDetails,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
       payload: payload,
     );
   }
 
-  // 🔹 Запланировать уведомление на конкретное время
   Future<void> scheduleMedicationReminder({
     required int id,
     required String title,
     required String body,
     required int hour,
     required int minute,
-    required List<int> daysOfWeek, // 1=Пн, 7=Вс
+    required List<int> daysOfWeek,
     String? payload,
   }) async {
-    // Создаём расписание для каждого дня недели
-    for (int day in daysOfWeek) {
-      final now = tz.TZDateTime.now(tz.local);
-      var scheduledDate = tz.TZDateTime(
-        tz.local,
-        now.year,
-        now.month,
-        now.day,
-        hour,
-        minute,
-      );
+    await init();
 
-      // Если время уже прошло сегодня — планируем на следующий раз в этом дне недели
-      if (scheduledDate.isBefore(now)) {
-        // Вычисляем, сколько дней до следующего нужного дня недели
-        int daysUntil = (day - now.weekday + 7) % 7;
-        if (daysUntil == 0) daysUntil = 7; // если сегодня — то на следующей неделе
-        scheduledDate = scheduledDate.add(Duration(days: daysUntil));
-      }
+    final validDays = daysOfWeek
+        .where((day) => day >= DateTime.monday && day <= DateTime.sunday)
+        .toSet()
+        .toList()
+      ..sort();
 
-      await _notificationsPlugin.zonedSchedule(
-        id + day, // Уникальный ID для каждого дня
-        title,
-        body,
-        scheduledDate,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'medication_channel',
-            'Напоминания о лекарствах',
-            channelDescription: 'Уведомления о времени приёма препаратов',
-            importance: Importance.max,
-            priority: Priority.high,
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.time,
+    for (final day in validDays) {
+      final scheduledDate = _nextInstanceOfWeekdayTime(day, hour, minute);
+      final notificationId = _weeklyNotificationId(id, day);
+
+      await _scheduleWithFallback(
+        id: notificationId,
+        title: title,
+        body: body,
+        scheduledDate: scheduledDate,
         payload: payload,
       );
     }
   }
 
-  // 🔹 Отменить уведомление по ID
-  Future<void> cancelNotification(int id) async {
-    await _notificationsPlugin.cancel(id);
+  Future<void> cancelMedicationReminder({
+    required int id,
+    required List<int> daysOfWeek,
+  }) async {
+    for (final day in daysOfWeek) {
+      await _notificationsPlugin.cancel(_weeklyNotificationId(id, day));
+    }
   }
 
-  // 🔹 Отменить все уведомления
+  Future<void> cancelNotification(int id) async {
+    await _notificationsPlugin.cancel(_safeNotificationId(id));
+  }
+
   Future<void> cancelAllNotifications() async {
     await _notificationsPlugin.cancelAll();
+  }
+
+  Future<void> _scheduleWithFallback({
+    required int id,
+    required String title,
+    required String body,
+    required tz.TZDateTime scheduledDate,
+    String? payload,
+  }) async {
+    try {
+      await _zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: scheduledDate,
+        scheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: payload,
+      );
+    } catch (error) {
+      debugPrint('Exact alarm is unavailable, using inexact reminder: $error');
+      await _zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: scheduledDate,
+        scheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: payload,
+      );
+    }
+  }
+
+  Future<void> _zonedSchedule({
+    required int id,
+    required String title,
+    required String body,
+    required tz.TZDateTime scheduledDate,
+    required AndroidScheduleMode scheduleMode,
+    String? payload,
+  }) {
+    return _notificationsPlugin.zonedSchedule(
+      id,
+      title,
+      body,
+      scheduledDate,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: scheduleMode,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+      payload: payload,
+    );
+  }
+
+  tz.TZDateTime _nextInstanceOfWeekdayTime(int weekday, int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduledDate = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+
+    final daysUntil = (weekday - scheduledDate.weekday + 7) % 7;
+    scheduledDate = scheduledDate.add(Duration(days: daysUntil));
+
+    if (!scheduledDate.isAfter(now)) {
+      scheduledDate = scheduledDate.add(const Duration(days: 7));
+    }
+
+    return scheduledDate;
+  }
+
+  int _weeklyNotificationId(int baseId, int weekday) {
+    return (_safeNotificationId(baseId) * 10) + weekday;
+  }
+
+  int _safeNotificationId(int id) {
+    return id.abs() % 100000;
   }
 }

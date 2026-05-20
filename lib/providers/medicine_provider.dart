@@ -10,9 +10,8 @@ class MedicineProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
-  MedicineProvider(this._repo) { 
-    // Загружаем данные при создании, но лучше вызывать явно
-    // loadMedicines(); 
+  MedicineProvider(this._repo) {
+    loadAllMedicines();
   }
 
   List<Medicine> get medicines => _medicines;
@@ -53,7 +52,7 @@ class MedicineProvider with ChangeNotifier {
         schedule: schedule, daysOfWeek: daysOfWeek, 
         isCyclic: isCyclic, cycleStartDay: cycleStartDay, cycleEndDay: cycleEndDay,
       );
-      if (ok) loadTodaysMedicines();
+      if (ok) loadAllMedicines();
       else _error = 'Не удалось добавить';
       return ok;
     } catch (e) { 
@@ -91,7 +90,7 @@ class MedicineProvider with ChangeNotifier {
       );
       
       final ok = await _repo.updateMedicine(updated);
-      if (ok) loadTodaysMedicines();
+      if (ok) loadAllMedicines();
       else _error = 'Ошибка обновления';
       return ok;
     } catch (e) { 
@@ -108,7 +107,7 @@ class MedicineProvider with ChangeNotifier {
     try {
       final ok = await _repo.markMedicineAsTaken(id);
       if (ok) {
-        loadTodaysMedicines(); // Перезагружаем список, лекарство исчезнет
+        loadAllMedicines();
       } else {
         _error = 'Ошибка отметки';
       }
@@ -123,7 +122,7 @@ class MedicineProvider with ChangeNotifier {
     _isLoading = true; notifyListeners();
     try {
       final ok = await _repo.deleteMedicine(id);
-      if (ok) loadTodaysMedicines();
+      if (ok) loadAllMedicines();
       else _error = 'Ошибка удаления';
       return ok;
     } catch (e) { 
@@ -137,5 +136,5 @@ class MedicineProvider with ChangeNotifier {
 
   Medicine? getMedicine(String id) => _repo.getMedicine(id);
   List<Reminder> getReminders(String medId) => _repo.getRemindersForMedicine(medId);
-  void refresh() => loadTodaysMedicines();
+  void refresh() => loadAllMedicines();
 }

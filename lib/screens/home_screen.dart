@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/medicine_provider.dart';
 import 'add_medicine_screen.dart';
+import 'calendar_screen.dart';
 import 'side_effects_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -28,9 +29,11 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.calendar_month_outlined),
             tooltip: 'Календарь цикла',
             onPressed: () {
-              // TODO: Навигация на экран календаря
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Календарь в разработке')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CalendarScreen(),
+                ),
               );
             },
           ),

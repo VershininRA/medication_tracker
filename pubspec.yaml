@@ -78,6 +78,16 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/app_icon.png
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/roboto-regular.ttf
+        - asset: assets/fonts/roboto-bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
@@ -109,9 +119,9 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 flutter_launcher_icons:
-  android: "launcher_icon"
+  android: true
   ios: true
-  image_path: "assets/icon/app_icon.png" # Путь к твоей картинке
+  image_path: "assets/app_icon.png" # Путь к твоей картинке
   min_sdk_android: 21
   # Можно указать адаптивную иконку для Android 8+
   adaptive_icon_background: "#E8A4B8" 

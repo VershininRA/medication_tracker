@@ -26,9 +26,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   Widget build(BuildContext context) {
     // Формируем список экранов здесь, где доступен setState
     final List<Widget> screens = [
-      DashboardBody(onProfileTap: () => setState(() => _selectedIndex = 3)),
+      DashboardBody(onProfileTap: () => setState(() => _selectedIndex = 4)),
       const HomeScreen(),               
       const AnalyticsScreen(),
+      const CalendarScreen(),
       const ProfileScreen(),            
     ];
 
@@ -61,6 +62,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             icon: Icon(Icons.analytics_outlined),
             activeIcon: Icon(Icons.analytics),
             label: 'Аналитика',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month_outlined),
+            activeIcon: Icon(Icons.calendar_month),
+            label: 'Календарь',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
