@@ -4,7 +4,6 @@ import 'home_screen.dart';
 import 'calendar_screen.dart';
 import 'side_effects_screen.dart';
 import 'profile_screen.dart';
-import '../models/user_profile.dart';
 import '../services/hive_service.dart';
 import 'package:provider/provider.dart';
 import 'analytics_screen.dart';

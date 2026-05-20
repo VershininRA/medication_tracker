@@ -188,10 +188,6 @@ class AppTheme {
           borderRadius: BorderRadius.circular(20),
         ),
       ),
-
-      // Скаффолд
-      scaffoldBackgroundColor: backgroundColor,
-      useMaterial3: true,
     );
   }
 }

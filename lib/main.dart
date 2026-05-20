@@ -8,12 +8,9 @@ import 'models/models.dart';
 import 'services/hive_service.dart';
 import 'repositories/medication_repository.dart';
 import 'providers/medicine_provider.dart';
-import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
 import 'providers/side_effect_provider.dart';
 import 'screens/main_dashboard_screen.dart';
-import 'models/cycle_settings.dart';
-import 'models/user_profile.dart';
 import 'theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 
@@ -97,25 +94,6 @@ class MedicationTrackerApp extends StatelessWidget {
         darkTheme: _buildDarkTheme(),
         themeMode: ThemeMode.system,
         home: const SplashScreen(), 
-      ),
-    );
-  }
-
-  ThemeData _buildLightTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      primaryColor: const Color(0xFFE8A4B8),
-      scaffoldBackgroundColor: const Color(0xFFFFF5F7),
-      colorScheme: const ColorScheme.light(
-        primary: Color.fromARGB(255, 98, 51, 65),
-        secondary: Color(0xFFF9D5E0),
-        surface: Colors.white,
-        error: Color(0xFFEF9A9A),
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFE8A4B8),
-        foregroundColor: Colors.white,
-        elevation: 0,
       ),
     );
   }
