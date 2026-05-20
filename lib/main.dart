@@ -14,7 +14,8 @@ import 'providers/side_effect_provider.dart';
 import 'screens/main_dashboard_screen.dart';
 import 'models/cycle_settings.dart';
 import 'models/user_profile.dart';
-
+import 'theme/app_theme.dart';
+import 'screens/splash_screen.dart';
 
 Future<void> _requestNotificationPermissions() async {
   final status = await Permission.notification.status;
@@ -92,10 +93,10 @@ class MedicationTrackerApp extends StatelessWidget {
       child: MaterialApp(
         title: 'МедТрекер',
         debugShowCheckedModeBanner: false,
-        theme: _buildLightTheme(),
+        theme: AppTheme.lightTheme,
         darkTheme: _buildDarkTheme(),
         themeMode: ThemeMode.system,
-        home: const MainDashboardScreen(), 
+        home: const SplashScreen(), 
       ),
     );
   }
@@ -106,7 +107,7 @@ class MedicationTrackerApp extends StatelessWidget {
       primaryColor: const Color(0xFFE8A4B8),
       scaffoldBackgroundColor: const Color(0xFFFFF5F7),
       colorScheme: const ColorScheme.light(
-        primary: Color(0xFFE8A4B8),
+        primary: Color.fromARGB(255, 98, 51, 65),
         secondary: Color(0xFFF9D5E0),
         surface: Colors.white,
         error: Color(0xFFEF9A9A),
