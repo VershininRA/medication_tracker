@@ -8,6 +8,9 @@ import '../models/user_profile.dart';
 import '../services/hive_service.dart';
 import 'package:provider/provider.dart';
 import 'analytics_screen.dart';
+import '../models/cycle_settings.dart';
+import '../widgets/cycle_phase_card.dart';
+import '../widgets/statistic_card.dart';
 
 class MainDashboardScreen extends StatefulWidget {
   const MainDashboardScreen({super.key});
@@ -94,6 +97,12 @@ class DashboardBody extends StatelessWidget {
     final hiveService = HiveService();
     final profile = hiveService.getProfile();
     final userName = profile?.name ?? 'Анна';
+    final cycleSettings = hiveService.getCycleSettings() ??
+        CycleSettings(
+          lastPeriodStart: DateTime.now().subtract(const Duration(days: 14)),
+          cycleLength: 28,
+          periodLength: 5,
+        );
     
     // Считаем статистику
     final takenCount = allMeds.where((m) => m.isTakenToday()).length;
@@ -131,17 +140,26 @@ class DashboardBody extends StatelessWidget {
                     Text(
                       '$greeting, $userName!', 
                       style: const TextStyle(
-                        fontSize: 24,
+                        fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF4A4A4A),
+                        color: Color(0xFF2D2428),
+                        letterSpacing: -0.5,
                       ),
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      'Принято: $takenCount из $totalCount',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8A4B8).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        'Принято: $takenCount из $totalCount лекарств',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFE8A4B8),
+                        ),
                       ),
                     ),
                   ],
@@ -151,71 +169,172 @@ class DashboardBody extends StatelessWidget {
                 children: [
                   _buildIconButton(Icons.notifications_outlined, () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Уведомления настроены в системе')),
+                      const SnackBar(
+                        content: Text('Уведомления настроены в системе'),
+                        backgroundColor: Color(0xFF4CAF50),
+                      ),
                     );
                   }),
                   const SizedBox(width: 10),
-                  // 🔥 Теперь эта кнопка реально переключает вкладку
                   _buildIconButton(Icons.person_outline, onProfileTap),
                 ],
               ),
             ],
           ),
 
-          const SizedBox(height: 25),
+          const SizedBox(height: 28),
 
           // 📊 ПРОГРЕСС БАР
           if (totalCount > 0)
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFE8A4B8).withOpacity(0.1),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFFE8A4B8).withOpacity(0.12),
+                    const Color(0xFFF4B4C9).withOpacity(0.08),
+                  ],
+                ),
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFE8A4B8).withOpacity(0.2),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFE8A4B8).withOpacity(0.1),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Ваш прогресс сегодня',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Ваш прогресс сегодня',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF2D2428),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      Text(
+                        '${(progress * 100).toInt()}%',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFE8A4B8),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                  LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.white,
-                    color: const Color(0xFFE8A4B8),
-                    minHeight: 10,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '${(progress * 100).toInt()}% выполнено',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    textAlign: TextAlign.right,
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: Colors.white.withOpacity(0.5),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFFE8A4B8),
+                      ),
+                      minHeight: 12,
+                    ),
                   ),
                 ],
               ),
             ),
           
-          const SizedBox(height: 30),
+          const SizedBox(height: 28),
+
+          // 🔄 ФАЗА ЦИКЛА
+          CyclePhaseCard(
+            settings: cycleSettings,
+            currentDate: DateTime.now(),
+          ),
+
+          const SizedBox(height: 28),
+
+          // 📈 СТАТИСТИКА
+          const Text(
+            'Статистика',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2D2428),
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.0,
+            children: [
+              StatisticCard(
+                title: 'Всего лекарств',
+                value: totalCount.toString(),
+                subtitle: 'активных',
+                color: const Color(0xFFE8A4B8),
+                icon: Icons.medication,
+              ),
+              StatisticCard(
+                title: 'Принято сегодня',
+                value: takenCount.toString(),
+                subtitle: 'из $totalCount',
+                color: const Color(0xFF4CAF50),
+                icon: Icons.check_circle,
+              ),
+              StatisticCard(
+                title: 'День цикла',
+                value: cycleSettings.getCycleDayFor(DateTime.now()).toString(),
+                subtitle: 'из ${cycleSettings.cycleLength}',
+                color: const Color(0xFF9C27B0),
+                icon: Icons.calendar_today,
+              ),
+              StatisticCard(
+                title: 'Приверженность',
+                value: '${(progress * 100).toInt()}%',
+                subtitle: 'за сегодня',
+                color: const Color(0xFFFFC107),
+                icon: Icons.trending_up,
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 28),
 
           // 🎯 ДВЕ БОЛЬШИЕ КНОПКИ
           const Text(
             'Быстрый доступ',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2D2428),
+              letterSpacing: 0.3,
+            ),
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 14),
           
           Row(
             children: [
-              // Кнопка 1: Схема приема
               Expanded(
                 child: _buildLargeMenuCard(
                   context,
                   icon: Icons.list_alt,
-                  title: 'Схема\nприема',
-                  subtitle: 'Все препараты',
-                  color: const Color(0xFFB2EBF2),
+                  title: 'Мои\nлекарства',
+                  subtitle: 'Полный список',
+                  color: const Color(0xFF00BCD4),
                   onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
                   },
@@ -223,13 +342,12 @@ class DashboardBody extends StatelessWidget {
               ),
               const SizedBox(width: 15),
               
-              // Кнопка 2: Мой календарь
               Expanded(
                 child: _buildLargeMenuCard(
                   context,
                   icon: Icons.calendar_month,
-                  title: 'Мой\nкалендарь',
-                  subtitle: 'Цикл и симптомы',
+                  title: 'Календарь\nцикла',
+                  subtitle: 'Фазы и симптомы',
                   color: const Color(0xFFC5E1A5),
                   onTap: () {
                     Navigator.push(
@@ -241,16 +359,62 @@ class DashboardBody extends StatelessWidget {
               ),
             ],
           ),
+
+          const SizedBox(height: 14),
+
+          Row(
+            children: [
+              Expanded(
+                child: _buildLargeMenuCard(
+                  context,
+                  icon: Icons.analytics,
+                  title: 'Аналитика',
+                  subtitle: 'Статистика',
+                  color: const Color(0xFFFFCC80),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AnalyticsScreen()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 15),
+              
+              Expanded(
+                child: _buildLargeMenuCard(
+                  context,
+                  icon: Icons.note_alt,
+                  title: 'Побочные\nэффекты',
+                  subtitle: 'Дневник',
+                  color: const Color(0xFFEF9A9A),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const SideEffectsScreen()),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
           
-          const SizedBox(height: 20),
-          
+          const SizedBox(height: 24),
+
           Center(
             child: Text(
-              'Совет: Отмечайте лекарства вовремя,\nчтобы сохранить прогресс.',
+              '💡 Отмечайте лекарства вовремя,\nчтобы поддерживать ваше здоровье!',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1.5,
+              ),
             ),
           ),
+
+          const SizedBox(height: 20),
         ],
       ),
     );

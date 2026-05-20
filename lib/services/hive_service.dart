@@ -25,7 +25,14 @@ class HiveService {
   // --- Medicine ---
   Box<Medicine> get medicineBox => _medicinesBox;
   Future<void> addMedicine(Medicine medicine) async => await _medicinesBox.put(medicine.id, medicine);
-  List<Medicine> getActiveMedicines() => _medicinesBox.values.where((m) => m.isActive).toList();
+  
+  List<Medicine> getActiveMedicines() {
+    return _medicinesBox.values
+        .where((m) => m.isActive)
+        .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)); // Новые сверху
+  }
+  
   Medicine? getMedicineById(String id) => _medicinesBox.get(id);
   Future<void> updateMedicine(Medicine medicine) async => await _medicinesBox.put(medicine.id, medicine);
   Future<void> deleteMedicine(String id) async => await _medicinesBox.delete(id);

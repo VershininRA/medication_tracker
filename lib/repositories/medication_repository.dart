@@ -48,7 +48,6 @@ class MedicationRepository {
       await _hiveService.addMedicine(medicine);
       return true;
     } catch (e) {
-      print('❌ Error adding medicine: $e');
       return false;
     }
   }
@@ -57,8 +56,13 @@ class MedicationRepository {
   List<Medicine> getTodaysMedicines() {
     final today = DateTime.now();
     return _hiveService.getActiveMedicines()
-        .where((med) => med.shouldTakeToday(today))
-        .toList();
+        .where((med) => med.shouldTakeToday(today) && !med.isTakenToday())
+        .toList()
+        ..sort((a, b) {
+          // Сортируем по времени в расписании
+          if (a.schedule.isEmpty || b.schedule.isEmpty) return 0;
+          return a.schedule.first.compareTo(b.schedule.first);
+        });
   }
 
   /// Получить все активные лекарства
@@ -77,7 +81,6 @@ class MedicationRepository {
       await _hiveService.updateMedicine(medicine);
       return true;
     } catch (e) {
-      print('❌ Error updating medicine: $e');
       return false;
     }
   }
@@ -88,7 +91,6 @@ class MedicationRepository {
       await _hiveService.deleteMedicine(id);
       return true;
     } catch (e) {
-      print('❌ Error deleting medicine: $e');
       return false;
     }
   }
@@ -122,7 +124,6 @@ class MedicationRepository {
       await _hiveService.addReminder(reminder);
       return true;
     } catch (e) {
-      print('❌ Error adding reminder: $e');
       return false;
     }
   }
@@ -159,7 +160,6 @@ class MedicationRepository {
       await _hiveService.addSideEffect(sideEffect);
       return true;
     } catch (e) {
-      print('❌ Error adding side effect: $e');
       return false;
     }
   }
@@ -172,7 +172,6 @@ class MedicationRepository {
       await _hiveService.addSideEffect(sideEffect);
       return true;
     } catch (e) {
-      print('❌ Error saving side effect object: $e');
       return false;
     }
   }
@@ -192,7 +191,6 @@ class MedicationRepository {
       await _hiveService.deleteSideEffect(id);
       return true;
     } catch (e) {
-      print('❌ Error deleting side effect: $e');
       return false;
     }
   }
@@ -224,7 +222,6 @@ class MedicationRepository {
       await _hiveService.addCycleDay(cycleDay);
       return true;
     } catch (e) {
-      print('❌ Error adding cycle day: $e');
       return false;
     }
   }
@@ -242,7 +239,6 @@ class MedicationRepository {
       
       return true;
     } catch (e) {
-      print('❌ Error marking medicine as taken: $e');
       return false;
     }
   }
