@@ -24,13 +24,14 @@ class CycleDayAdapter extends TypeAdapter<CycleDay> {
       symptoms: (fields[4] as List).cast<String>(),
       notes: fields[5] as String?,
       createdAt: fields[6] as DateTime,
+      moodScore: fields[7] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CycleDay obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -44,7 +45,9 @@ class CycleDayAdapter extends TypeAdapter<CycleDay> {
       ..writeByte(5)
       ..write(obj.notes)
       ..writeByte(6)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(7)
+      ..write(obj.moodScore);
   }
 
   @override

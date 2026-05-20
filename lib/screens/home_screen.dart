@@ -1,10 +1,8 @@
-// lib/screens/home_screen.dart
-// Главный экран: список активных лекарств
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/medicine_provider.dart';
-import 'add_medicine_screen.dart'; // Убедись, что путь верный
+import 'add_medicine_screen.dart';
+import 'side_effects_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -17,23 +15,40 @@ class HomeScreen extends StatelessWidget {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.note_alt_outlined),
+            tooltip: 'Дневник симптомов',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SideEffectsScreen()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.calendar_month_outlined),
             tooltip: 'Календарь цикла',
             onPressed: () {
-              // TODO: Навигация на экран календаря/цикла
+              // TODO: Навигация на экран календаря
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Календарь в разработке')),
+              );
             },
           ),
         ],
       ),
       body: Consumer<MedicineProvider>(
         builder: (context, provider, child) {
-          // 🔹 Состояние загрузки
           if (provider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // 🔹 Пустой список
-          if (provider.medicines.isEmpty) {
+          // Получаем лекарства НА СЕГОДНЯ, которые ЕЩЕ НЕ ПРИНЯТЫ
+          final today = DateTime.now();
+          final todaysMeds = provider.medicines
+              .where((med) => med.shouldTakeToday(today) && !med.isTakenToday())
+              .toList();
+
+          if (todaysMeds.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -41,19 +56,22 @@ class HomeScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.medication_outlined,
+                      Icons.check_circle_outline,
                       size: 80,
-                      color: Theme.of(context).primaryColor.withOpacity(0.6),
+                      color: Colors.green.shade300,
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Список лекарств пуст',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      'На сегодня всё готово!',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.bold,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Нажмите кнопку "+", чтобы добавить первый препарат',
+                      'Все лекарства приняты или их нет в расписании.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.grey.shade600,
                       ),
@@ -65,14 +83,14 @@ class HomeScreen extends StatelessWidget {
             );
           }
 
-          // 🔹 Список лекарств с pull-to-refresh
           return RefreshIndicator(
             onRefresh: () async => provider.refresh(),
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: provider.medicines.length,
+              itemCount: todaysMeds.length,
               itemBuilder: (context, index) {
-                final medicine = provider.medicines[index];
+                final medicine = todaysMeds[index];
+                
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   elevation: 2,
@@ -82,61 +100,63 @@ class HomeScreen extends StatelessWidget {
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 10,
+                      vertical: 8,
                     ),
-                    leading: CircleAvatar(
-                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.15),
-                      radius: 24,
-                      child: Icon(
-                        Icons.medication,
-                        color: Theme.of(context).primaryColor,
-                        size: 28,
+                    // 👈 ЛЕВАЯ ЧАСТЬ: Галочка для отметки
+                    leading: Checkbox(
+                      value: false, // Всегда false, так как если принято, оно исчезнет из списка
+                      onChanged: (val) async {
+                        if (val == true) {
+                          await provider.markAsTaken(medicine.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('${medicine.name} принято!'),
+                                backgroundColor: Colors.green,
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      activeColor: Colors.green,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
+                    // 👈 ЦЕНТР: Информация
                     title: Text(
                       medicine.name,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                     ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (medicine.dosage != null && medicine.dosage!.isNotEmpty)
-                            Text(
-                              medicine.dosage!,
-                              style: TextStyle(
-                                color: Colors.grey.shade700,
-                                fontSize: 14,
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (medicine.dosage != null && medicine.dosage!.isNotEmpty)
+                          Text(
+                            medicine.dosage!,
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                          ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                medicine.schedule.join(', '),
+                                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.access_time,
-                                size: 14,
-                                color: Colors.grey.shade500,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  medicine.schedule.join(', '),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ),
+                    // 👈 ПРАВАЯ ЧАСТЬ: Кнопки действий
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -161,9 +181,7 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    onTap: () {
-                      // TODO: Переход на детальный экран / настройку напоминаний
-                    },
+                    onTap: null, // Отключаем реакцию на нажатие всей карточки
                   ),
                 );
               },
@@ -175,18 +193,17 @@ class HomeScreen extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const AddMedicineScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const AddMedicineScreen()),
           );
         },
         icon: const Icon(Icons.add),
         label: const Text('Добавить'),
+        backgroundColor: const Color(0xFFE8A4B8),
       ),
     );
   }
 
-  // 🔹 Диалог подтверждения удаления
+  // Диалог удаления
   void _showDeleteDialog(BuildContext context, dynamic medicine) {
     showDialog(
       context: context,

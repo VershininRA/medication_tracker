@@ -10,6 +10,10 @@ import 'repositories/medication_repository.dart';
 import 'providers/medicine_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
+import 'providers/side_effect_provider.dart';
+import 'screens/main_dashboard_screen.dart';
+import 'models/cycle_settings.dart';
+import 'models/user_profile.dart';
 
 
 Future<void> _requestNotificationPermissions() async {
@@ -31,14 +35,27 @@ void main() async {
   Hive.registerAdapter(ReminderAdapter());
   Hive.registerAdapter(SideEffectAdapter());
   Hive.registerAdapter(CycleDayAdapter());
+  Hive.registerAdapter(CycleSettingsAdapter());
+  Hive.registerAdapter(UserProfileAdapter());
   
   await Hive.openBox<Medicine>('medicines');
   await Hive.openBox<Reminder>('reminders');
   await Hive.openBox<SideEffect>('side_effects');
   await Hive.openBox<CycleDay>('cycle_days');
+  await Hive.openBox<CycleSettings>('cycle_settings');
+  await Hive.openBox<UserProfile>('user_profile');
 
-  await NotificationService().init();
   
+  final hiveService = HiveService();
+  if (hiveService.getProfile() == null) {
+    await hiveService.saveProfile(UserProfile(
+      name: 'Анна',
+      notificationsEnabled: true,
+      createdAt: DateTime.now(),
+    ));
+  }
+  await NotificationService().init();
+
   runApp(const MedicationTrackerApp());
 }
 
@@ -48,6 +65,13 @@ class MedicationTrackerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hiveService = HiveService();
+    if (hiveService.getCycleSettings() == null) {
+      hiveService.saveCycleSettings(CycleSettings(
+        lastPeriodStart: DateTime.now().subtract(const Duration(days: 14)), // Примерно середина цикла
+        cycleLength: 28,
+        periodLength: 5,
+      ));
+    }
     final repository = MedicationRepository(hiveService);
 
     return MultiProvider(
@@ -59,6 +83,11 @@ class MedicationTrackerApp extends StatelessWidget {
             Provider.of<MedicationRepository>(context, listen: false),
           ),
         ),
+        ChangeNotifierProvider(
+          create: (context) => SideEffectProvider(
+            Provider.of<MedicationRepository>(context, listen: false),
+          ),
+        ),
       ],
       child: MaterialApp(
         title: 'МедТрекер',
@@ -66,7 +95,7 @@ class MedicationTrackerApp extends StatelessWidget {
         theme: _buildLightTheme(),
         darkTheme: _buildDarkTheme(),
         themeMode: ThemeMode.system,
-        home: const HomeScreen(),
+        home: const MainDashboardScreen(), 
       ),
     );
   }

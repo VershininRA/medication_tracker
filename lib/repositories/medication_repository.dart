@@ -164,15 +164,44 @@ class MedicationRepository {
     }
   }
 
+  Future<bool> saveSideEffect(SideEffect sideEffect) async {
+    if (sideEffect.description.trim().isEmpty) return false;
+    if (sideEffect.severity < 1 || sideEffect.severity > 3) return false;
+
+    try {
+      await _hiveService.addSideEffect(sideEffect);
+      return true;
+    } catch (e) {
+      print('❌ Error saving side effect object: $e');
+      return false;
+    }
+  }
+
+
   List<SideEffect> getSideEffectsByMedicine(String medicineId) {
     return _hiveService.getSideEffectsByMedicine(medicineId);
   }
 
-  // ==================== CYCLE ====================
+  List<SideEffect> getAllSideEffects() {
+    return _hiveService.getAllSideEffects();
+  }
+
+  /// Удалить побочный эффект
+  Future<bool> deleteSideEffect(String id) async {
+    try {
+      await _hiveService.deleteSideEffect(id);
+      return true;
+    } catch (e) {
+      print('❌ Error deleting side effect: $e');
+      return false;
+    }
+  }
+
+ // ==================== CYCLE ====================
   
   Future<bool> addCycleDay({
     required DateTime date,
-    required int dayNumber, // 1-35
+    required int dayNumber,
     String? phase,
     required List<String> symptoms,
     String? notes,
@@ -196,6 +225,24 @@ class MedicationRepository {
       return true;
     } catch (e) {
       print('❌ Error adding cycle day: $e');
+      return false;
+    }
+  }
+
+  // 👇 НОВЫЙ МЕТОД: Отметить лекарство как принятое
+  Future<bool> markMedicineAsTaken(String id) async {
+    try {
+      final box = _hiveService.medicineBox; // Убедись, что в HiveService есть такой getter
+      final medicine = box.get(id);
+      
+      if (medicine == null) return false;
+
+      final updatedMedicine = medicine.markAsTaken();
+      await box.put(id, updatedMedicine);
+      
+      return true;
+    } catch (e) {
+      print('❌ Error marking medicine as taken: $e');
       return false;
     }
   }

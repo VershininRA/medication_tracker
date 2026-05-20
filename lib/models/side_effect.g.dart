@@ -24,13 +24,14 @@ class SideEffectAdapter extends TypeAdapter<SideEffect> {
       timestamp: fields[4] as DateTime,
       notes: fields[5] as String?,
       cycleDay: fields[6] as int?,
+      imagePath: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, SideEffect obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -44,7 +45,9 @@ class SideEffectAdapter extends TypeAdapter<SideEffect> {
       ..writeByte(5)
       ..write(obj.notes)
       ..writeByte(6)
-      ..write(obj.cycleDay);
+      ..write(obj.cycleDay)
+      ..writeByte(7)
+      ..write(obj.imagePath);
   }
 
   @override
