@@ -4,6 +4,8 @@ import '../providers/medicine_provider.dart';
 import 'add_medicine_screen.dart';
 import 'calendar_screen.dart';
 import 'side_effects_screen.dart';
+import '../widgets/medicine_card_premium.dart';
+import '../widgets/confirmation_dialog.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -94,98 +96,34 @@ class HomeScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 final medicine = todaysMeds[index];
                 
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    // 👈 ЛЕВАЯ ЧАСТЬ: Галочка для отметки
-                    leading: Checkbox(
-                      value: false, // Всегда false, так как если принято, оно исчезнет из списка
-                      onChanged: (val) async {
-                        if (val == true) {
-                          await provider.markAsTaken(medicine.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('${medicine.name} принято!'),
-                                backgroundColor: Colors.green,
-                                duration: const Duration(seconds: 1),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      activeColor: Colors.green,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    // 👈 ЦЕНТР: Информация
-                    title: Text(
-                      medicine.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (medicine.dosage != null && medicine.dosage!.isNotEmpty)
-                          Text(
-                            medicine.dosage!,
-                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                return MedicineCardPremium(
+                  medicine: medicine,
+                  isTaken: medicine.isTakenToday(),
+                  onTake: () async {
+                    await provider.markAsTaken(medicine.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('✓ ${medicine.name} принято!'),
+                          backgroundColor: Colors.green,
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                medicine.schedule.join(', '),
-                                style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
                         ),
-                      ],
-                    ),
-                    // 👈 ПРАВАЯ ЧАСТЬ: Кнопки действий
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined),
-                          color: Theme.of(context).primaryColor,
-                          tooltip: 'Редактировать',
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => AddMedicineScreen(medicine: medicine),
-                              ),
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          color: Colors.redAccent.shade400,
-                          tooltip: 'Удалить',
-                          onPressed: () => _showDeleteDialog(context, medicine),
-                        ),
-                      ],
-                    ),
-                    onTap: null, // Отключаем реакцию на нажатие всей карточки
-                  ),
+                      );
+                    }
+                  },
+                  onEdit: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AddMedicineScreen(medicine: medicine),
+                      ),
+                    );
+                  },
+                  onDelete: () => _showDeleteDialog(context, medicine),
                 );
               },
             ),
@@ -210,24 +148,30 @@ class HomeScreen extends StatelessWidget {
   void _showDeleteDialog(BuildContext context, dynamic medicine) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить лекарство?'),
-        content: Text('Вы уверены, что хотите удалить «${medicine.name}»?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () {
-              Provider.of<MedicineProvider>(context, listen: false)
-                  .deleteMedicine(medicine.id);
-              Navigator.pop(context);
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent.shade400),
-            child: const Text('Удалить'),
-          ),
-        ],
+      builder: (context) => ConfirmationDialog(
+        title: 'Удалить лекарство?',
+        message: 'Вы уверены, что хотите удалить «${medicine.name}»?\n\nЭто действие нельзя отменить.',
+        confirmText: 'Удалить',
+        cancelText: 'Отмена',
+        icon: Icons.warning_rounded,
+        confirmColor: Colors.redAccent,
+        onConfirm: () {
+          Provider.of<MedicineProvider>(context, listen: false)
+              .deleteMedicine(medicine.id);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${medicine.name} удалено'),
+                backgroundColor: Colors.redAccent,
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+          }
+        },
       ),
     );
   }
